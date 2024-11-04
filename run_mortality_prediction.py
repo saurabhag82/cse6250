@@ -124,9 +124,11 @@ def load_phys_data():
                 Should include {'subject_id', 'hadm_id', 'icustay_id'}.
     """
 
-    X = pd.read_hdf(data_path + 'X.h5', 'X')
+    #X = pd.read_hdf(data_path + 'X.h5', 'X')
+    #X = pd.read_hdf(data_path + 'X.h5', 'X')
+    X = pd.read_csv(data_path + 'x.csv')#, 'X')
     # Y = pd.read_hdf(data_path + 'Y.h5', 'Y')
-    static = pd.DataFrame.from_csv(data_path + 'static.csv')
+    static = pd.read_csv(data_path + 'static.csv')
 
     if 'subject_id' not in X.columns:
         X = X.reset_index()
