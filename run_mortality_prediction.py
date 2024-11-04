@@ -1097,9 +1097,9 @@ def load_processed_data(data_hours=24, gap_time=12):
         cmo = cmo[cmo.cmo > 0]
         cmo['timednr_chart'] = pd.to_datetime(cmo.timednr_chart)
         cmo['timecmo_chart'] = pd.to_datetime(cmo.timecmo_chart)
-        cmo['timecmo_nursingnote'] = pd.to_datetime(cmo.timecmo_nursingnote)
+        #cmo['timecmo_nursingnote'] = pd.to_datetime(cmo.timecmo_nursingnote)
         cmo['cmo_min_time'] = cmo.loc[:, [
-            'timednr_chart', 'timecmo_chart', 'timecmo_nursingnote']].min(axis=1)
+            'timednr_chart', 'timecmo_chart']].min(axis=1)
         all_mort_times = pd.merge(deathtimes_valid, cmo, on=['subject_id', 'hadm_id', 'icustay_id'], how='outer')[
             ['subject_id', 'hadm_id', 'icustay_id', 'deathtime', 'dischtime', 'cmo_min_time']]
         all_mort_times['deathtime'] = pd.to_datetime(all_mort_times.deathtime)
@@ -1147,6 +1147,7 @@ def load_processed_data(data_hours=24, gap_time=12):
         new_df = pd.concat([test, pad_df], axis=0)
 
         # get the static vars we want, make them discrete columns
+        print("static columns", static.columns)
         static_to_keep = static[['subject_id', 'gender', 'age', 'ethnicity',
                                  'sapsii_quartile', 'first_careunit', 'mort_hosp_valid']]
         static_to_keep.loc[:, 'ethnicity'] = static_to_keep['ethnicity'].apply(
@@ -1187,7 +1188,7 @@ def load_processed_data(data_hours=24, gap_time=12):
 
         # get the data as a np matrix of size num_examples x timesteps x features
         X_full_matrix = np.reshape(
-            X_full.as_matrix(), (len(subject_ids), data_cutoff, -1))
+            X_full.to_numpy(), (len(subject_ids), data_cutoff, -1))
         print("Shape of X: ")
         print(X_full_matrix.shape)
 

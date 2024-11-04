@@ -1,4 +1,4 @@
-subject_id,hadm_id,icustay_id,fullcode_first,cmo_first,dnr_first,dni_first,dncpr_first,fullcode_last,cmp_last,dnr_last,dni_last,DNCPR_last,fullcode,cmo,dnr,dni,dncpr,dnr_first_charttime,dni_first_charttime,dncpr_first_charttime,timecmo_chart
+subject_id,hadm_id,icustay_id,fullcode_first,cmo_first,dnr_first,dni_first,dncpr_first,fullcode_last,cmp_last,dnr_last,dni_last,DNCPR_last,fullcode,cmo,dnr,dni,dncpr,timednr_chart,dni_first_charttime,dncpr_first_charttime,timecmo_chart
 31942,155539,291930,,,,,,,,,,,,,,,,,,,
 77565,189804,216416,,,,,,,,,,,,,,,,,,,
 97846,127950,246374,,,,,,,,,,,,,,,,,,,

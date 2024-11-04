@@ -7,7 +7,10 @@ SELECT
   t1.gender,
   t1.admission_age,
   t1.ethnicity,
-  t2.first_careunit
+  t2.first_careunit,
+  t1.dischtime,
+  t1.dod as deathtime,
+  t1.intime
 FROM
   `physionet-data.mimiciii_derived.icustay_detail` AS t1
 INNER JOIN
