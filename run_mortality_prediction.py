@@ -126,7 +126,7 @@ def load_phys_data():
 
     #X = pd.read_hdf(data_path + 'X.h5', 'X')
     #X = pd.read_hdf(data_path + 'X.h5', 'X')
-    X = pd.read_csv(data_path + 'x.csv')#, 'X')
+    X = pd.read_csv(data_path + 'x.csv', low_memory=False, dtype={"ptt_AVG": float, "inr_AVG": float,})#, 'X')
     # Y = pd.read_hdf(data_path + 'Y.h5', 'Y')
     static = pd.read_csv(data_path + 'static.csv')
 
@@ -178,7 +178,7 @@ def make_discrete_values(mat):
     normal_dict = mat.groupby(['subject_id']).mean().mean().to_dict()
     std_dict = mat.std().to_dict()
     feature_cols = mat.columns[len(INDEX_COLS):]
-    print(feature_cols)
+    print("feature_cols", feature_cols)
     X_words = mat.loc[:, feature_cols].apply(
         lambda x: transform_vals(x, normal_dict, std_dict), axis=0)
     mat.loc[:, feature_cols] = X_words
@@ -1097,7 +1097,7 @@ def load_processed_data(data_hours=24, gap_time=12):
         cmo = cmo[cmo.cmo > 0]
         cmo['timednr_chart'] = pd.to_datetime(cmo.timednr_chart)
         cmo['timecmo_chart'] = pd.to_datetime(cmo.timecmo_chart)
-        #cmo['timecmo_nursingnote'] = pd.to_datetime(cmo.timecmo_nursingnote)
+        cmo['timecmo_nursingnote'] = pd.to_datetime(cmo.timecmo_nursingnote)
         cmo['cmo_min_time'] = cmo.loc[:, [
             'timednr_chart', 'timecmo_chart']].min(axis=1)
         all_mort_times = pd.merge(deathtimes_valid, cmo, on=['subject_id', 'hadm_id', 'icustay_id'], how='outer')[
@@ -1156,6 +1156,7 @@ def load_processed_data(data_hours=24, gap_time=12):
             categorize_age)
         static_to_keep = pd.get_dummies(static_to_keep, columns=[
                                         'gender', 'age', 'ethnicity'])
+        print("static_to_keep", static_to_keep.columns)
 
         # merge the phys with static
         X_full = pd.merge(new_df.reset_index(), static_to_keep,
@@ -1185,10 +1186,18 @@ def load_processed_data(data_hours=24, gap_time=12):
        
         feature_names = X_full.columns
         np.save('feature_names.npy', feature_names)
+        print("feature_names", feature_names, len(feature_names))
+        print("XFull shape",X_full.shape)
 
         # get the data as a np matrix of size num_examples x timesteps x features
+        arr = X_full.to_numpy()
+        np.random.shuffle(arr)
+        print("arr shape", arr.shape)
+        elems = len(subject_ids) * data_cutoff * 227
+        selected_elements = arr[:elems]
+        print(len(arr), len(selected_elements), elems)
         X_full_matrix = np.reshape(
-            X_full.to_numpy(), (len(subject_ids), data_cutoff, -1))
+            selected_elements, (len(subject_ids), data_cutoff, -1))
         print("Shape of X: ")
         print(X_full_matrix.shape)
 
