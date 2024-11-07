@@ -1093,7 +1093,7 @@ def load_processed_data(data_hours=24, gap_time=12):
         deathtimes_valid = deathtimes[deathtimes.dischtime >=
                                       deathtimes.deathtime]
         deathtimes_valid['mort_hosp_valid'] = True
-        cmo = pd.read_csv('data/code_status.csv')
+        cmo = pd.read_csv('data/code_status.csv', low_memory=False)
         cmo = cmo[cmo.cmo > 0]
         cmo['timednr_chart'] = pd.to_datetime(cmo.timednr_chart)
         cmo['timecmo_chart'] = pd.to_datetime(cmo.timecmo_chart)
@@ -1186,15 +1186,17 @@ def load_processed_data(data_hours=24, gap_time=12):
        
         feature_names = X_full.columns
         np.save('feature_names.npy', feature_names)
-        print("feature_names", feature_names, len(feature_names))
+        print("feature_names", list(feature_names), len(feature_names))
         print("XFull shape",X_full.shape)
 
         # get the data as a np matrix of size num_examples x timesteps x features
         arr = X_full.to_numpy()
         np.random.shuffle(arr)
         print("arr shape", arr.shape)
-        elems = len(subject_ids) * data_cutoff * 227
-        selected_elements = arr[:elems]
+        elems = len(subject_ids) * data_cutoff# * 227
+        random_indices = np.random.choice(len(arr), elems, replace=False)
+        selected_elements = arr[random_indices]
+        #selected_elements = arr[:elems]
         print(len(arr), len(selected_elements), elems)
         X_full_matrix = np.reshape(
             selected_elements, (len(subject_ids), data_cutoff, -1))
@@ -1216,11 +1218,11 @@ def load_processed_data(data_hours=24, gap_time=12):
 
         np.save(save_data_path + 'X.npy', X_full_matrix)
         np.save(save_data_path + 'careunits.npy',
-                np.squeeze(careunits.as_matrix(), axis=1))
+                np.squeeze(careunits.to_numpy(), axis=1))
         np.save(save_data_path + 'saps_quartile.npy',
-                np.squeeze(saps_quartile.as_matrix(), axis=1))
+                np.squeeze(saps_quartile.to_numpy(), axis=1))
         np.save(save_data_path + 'subject_ids.npy', np.array(subject_ids))
-        np.save(save_data_path + 'Y.npy', np.squeeze(Y.as_matrix(), axis=1))
+        np.save(save_data_path + 'Y.npy', np.squeeze(Y.to_numpy(), axis=1))
 
         X = X_full_matrix
 

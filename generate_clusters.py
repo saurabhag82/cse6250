@@ -69,7 +69,7 @@ def create_seq_ae(X_train, X_val, latent_dim, learning_rate):
     encoder = Model(inputs, encoded)
 
 
-    sequence_autoencoder.compile(optimizer=Adam(lr=learning_rate), 
+    sequence_autoencoder.compile(optimizer=Adam(learning_rate=learning_rate), 
                                  loss='mse')
 
     return encoder, sequence_autoencoder
@@ -105,8 +105,8 @@ def train_seq_ae(X_train, X_val, FLAGS):
     if not os.path.exists('clustering_models/'):
         os.makedirs('clustering_models/')
 
-    encoder.save('clustering_models/encoder_' + str(FLAGS.data_hours))
-    sequence_autoencoder.save('clustering_models/seq_ae_' + str(FLAGS.data_hours))
+    encoder.save('clustering_models/encoder_' + str(FLAGS.data_hours)+".h5")
+    sequence_autoencoder.save('clustering_models/seq_ae_' + str(FLAGS.data_hours)+".h5")
     return encoder, sequence_autoencoder
 
 ########## MAIN ##########################################################################
