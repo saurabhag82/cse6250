@@ -1,0 +1,59 @@
+WITH first_icustay AS (
+    SELECT
+        subject_id,
+        icustay_id,
+        hadm_id,
+        MIN(intime) AS first_intime,
+        outtime AS first_outtime
+    FROM
+        `physionet-data.mimiciii_clinical.icustays`
+    GROUP BY subject_id, icustay_id, hadm_id, outtime
+),
+
+hourly_measurements AS (
+    SELECT
+        ce.icustay_id,
+        ce.subject_id,
+        ce.hadm_id,
+        ROUND(EXTRACT(HOUR FROM ce.charttime) / 1.0) * 1 AS hour,  -- Hour extraction
+        CASE
+            WHEN ce.itemid IN (50868) THEN "ANION GAP"
+            WHEN ce.itemid IN (50882) THEN "BICARBONATE"
+            WHEN ce.itemid IN (50885) THEN "BLOOD PH"
+            -- ... (list of 29 items)
+        END AS variable,
+        AVG(ce.valuenum) AS avg_value,
+        ce.charttime
+    FROM
+        `physionet-data.mimiciii_clinical.chartevents` ce
+    JOIN
+        first_icustay f ON ce.icustay_id = f.icustay_id
+    JOIN
+        `physionet-data.mimiciii_clinical.patients` p ON ce.subject_id = p.subject_id
+    WHERE
+        ce.itemid IN (50868, 50882, 50885, 51006, 50902, 50912, 50811, 50821, 198, 226730, 
+                      50809, 220045, 51221, 51222, 50850, 50813, 50971, 220052, 220277, 
+                      51275, 50960, 51265, 50983, 220179, 223761, 763, 51144)
+        AND EXTRACT(YEAR FROM ce.charttime) - EXTRACT(YEAR FROM p.dob) > 15  -- Age > 15
+        AND ce.charttime BETWEEN f.first_intime AND TIMESTAMP_ADD(f.first_intime, INTERVAL 1 DAY)  -- First 24 hours
+    GROUP BY ce.icustay_id, ce.subject_id, ce.hadm_id, hour, variable, ce.charttime
+),
+
+final_data AS (
+    SELECT 
+        hm.*,
+        p.gender,
+        a.ethnicity,  -- Get ethnicity from admissions table
+        TIMESTAMP_DIFF(hm.charttime, p.dob, YEAR) AS age,
+        TIMESTAMP_DIFF(f.first_outtime, f.first_intime, HOUR) AS total_hospital_stay_hours  -- Total hours in hospital
+    FROM hourly_measurements hm
+    JOIN `physionet-data.mimiciii_clinical.icustays` icu ON hm.icustay_id = icu.icustay_id
+    JOIN `physionet-data.mimiciii_clinical.patients` p ON hm.subject_id = p.subject_id
+    JOIN `physionet-data.mimiciii_clinical.admissions` a ON hm.hadm_id = a.hadm_id  -- Join admissions to get ethnicity
+    JOIN first_icustay f ON hm.icustay_id = f.icustay_id  -- Join the first ICU stay to get total hospital stay
+    WHERE TIMESTAMP_DIFF(hm.charttime, p.dob, YEAR) > 15  -- Age > 15
+)
+
+SELECT * 
+FROM final_data
+ORDER BY icustay_id, charttime;
