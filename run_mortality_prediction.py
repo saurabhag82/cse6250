@@ -16,7 +16,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_auc_score
 import tensorflow as tf
 from keras.optimizers import Adam
-from keras import backend as K
+#from keras import backend as K
+from tensorflow.keras import backend as K
 from keras.models import Sequential, load_model
 from keras.layers import Dense, Input
 from keras.callbacks import ModelCheckpoint, EarlyStopping
@@ -451,7 +452,7 @@ def create_single_task_model(n_layers, units, num_dense_shared_layers, dense_sha
     model.add(Dense(units=output_dim, activation='sigmoid'))
 
     model.compile(loss='binary_crossentropy',
-                  optimizer=Adam(lr=.0001),
+                  optimizer=Adam(learning_rate=.0001),
                   metrics=['accuracy'])
 
     return model
@@ -803,7 +804,7 @@ def run_global_model(X_train, y_train, cohorts_train,
         '/checkpoints/' + "_".join(model_fname_parts)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
-    model_fname = model_dir + '/{epoch:02d}-{val_loss:.2f}.hdf5'
+    model_fname = model_dir + '/{epoch:02d}-{val_loss:.2f}.hdf5.keras'
     checkpointer = ModelCheckpoint(model_fname, monitor='val_loss', verbose=1)
 
     model.fit(X_train, y_train,
@@ -813,7 +814,7 @@ def run_global_model(X_train, y_train, cohorts_train,
               validation_data=(X_val, y_val))
 
     model.save(FLAGS.experiment_name + '/models/' +
-               "_".join(model_fname_parts))
+               "_".join(model_fname_parts) + ".keras")
 
     cohort_aucs = []
     y_pred = model.predict(X_val)
@@ -1237,10 +1238,15 @@ if __name__ == "__main__":
 
     # Limit GPU usage.
     os.environ["CUDA_VISIBLE_DEVICES"] = FLAGS.gpu_num
-    config = tf.ConfigProto()
+    #config = tf.ConfigProto()
+    config = tf.compat.v1.ConfigProto()
     config.gpu_options.allow_growth = True  # Don't use all GPUs
     config.allow_soft_placement = True  # Enable manual control
-    K.tensorflow_backend.set_session(tf.Session(config=config))
+    session = tf.compat.v1.Session(config=config)
+    #K.set_session(session)
+    #physical_devices = tf.config.list_physical_devices('GPU')
+    #tf.config.experimental.set_memory_growth(physical_devices[0], True)
+    #K.tensorflow_backend.set_session(tf.Session(config=config))
 
     # Make folders for the results & models
     for folder in ['results', 'models', 'checkpoints']:
