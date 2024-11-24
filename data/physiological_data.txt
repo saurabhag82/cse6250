@@ -1,59 +1,309 @@
-WITH first_icustay AS (
-    SELECT
-        subject_id,
-        icustay_id,
-        hadm_id,
-        MIN(intime) AS first_intime,
-        outtime AS first_outtime
-    FROM
-        `physionet-data.mimiciii_clinical.icustays`
-    GROUP BY subject_id, icustay_id, hadm_id, outtime
+with first_icustay as (
+    select
+        p.subject_id,
+        i.icustay_id,
+        i.hadm_id,
+        p.gender as gender,
+        FLOOR(DATE_DIFF(i.intime, p.dob, DAY)/365.25) as age,
+        a.ethnicity as ethnicity,
+        i.intime
+    from `physionet-data.mimiciii_clinical.patients` p
+    join `physionet-data.mimiciii_clinical.icustays` i
+        on p.subject_id = i.subject_id
+    join `physionet-data.mimiciii_clinical.admissions` a
+        on i.hadm_id = a.hadm_id
+    join (
+        select subject_id, min(intime) as first_intime
+        from `physionet-data.mimiciii_clinical.icustays`
+        group by subject_id
+    ) f
+        on i.subject_id = f.subject_id and i.intime = f.first_intime
+    where FLOOR(DATE_DIFF(i.intime, p.dob, DAY)/365.25) > 15
 ),
 
-hourly_measurements AS (
-    SELECT
-        ce.icustay_id,
-        ce.subject_id,
-        ce.hadm_id,
-        ROUND(EXTRACT(HOUR FROM ce.charttime) / 1.0) * 1 AS hour,  -- Hour extraction
-        CASE
-            WHEN ce.itemid IN (50868) THEN "ANION GAP"
-            WHEN ce.itemid IN (50882) THEN "BICARBONATE"
-            WHEN ce.itemid IN (50885) THEN "BLOOD PH"
-            -- ... (list of 29 items)
-        END AS variable,
-        AVG(ce.valuenum) AS avg_value,
-        ce.charttime
-    FROM
-        `physionet-data.mimiciii_clinical.chartevents` ce
-    JOIN
-        first_icustay f ON ce.icustay_id = f.icustay_id
-    JOIN
-        `physionet-data.mimiciii_clinical.patients` p ON ce.subject_id = p.subject_id
-    WHERE
-        ce.itemid IN (50868, 50882, 50885, 51006, 50902, 50912, 50811, 50821, 198, 226730, 
-                      50809, 220045, 51221, 51222, 50850, 50813, 50971, 220052, 220277, 
-                      51275, 50960, 51265, 50983, 220179, 223761, 763, 51144)
-        AND EXTRACT(YEAR FROM ce.charttime) - EXTRACT(YEAR FROM p.dob) > 15  -- Age > 15
-        AND ce.charttime BETWEEN f.first_intime AND TIMESTAMP_ADD(f.first_intime, INTERVAL 1 DAY)  -- First 24 hours
-    GROUP BY ce.icustay_id, ce.subject_id, ce.hadm_id, hour, variable, ce.charttime
+lab_measurements as (
+    select 
+        t1.subject_id,
+        t1.hadm_id,
+        t1.icustay_id,
+        t1.hours_in,
+        AVG(CASE WHEN label = 'ANION GAP' THEN valuenum ELSE NULL END) AS ANION_GAP,
+        AVG(CASE WHEN label = 'BICARBONATE' THEN valuenum ELSE NULL END) AS BICARBONATE,
+        AVG(CASE WHEN label = 'Blood pH' THEN valuenum ELSE NULL END) AS BLOOD_PH,
+        AVG(CASE WHEN label = 'CREATININE' THEN valuenum ELSE NULL END) AS CREATININE,
+        AVG(CASE WHEN label = 'CHLORIDE' THEN valuenum ELSE NULL END) AS CHLORIDE,
+        AVG(CASE WHEN label = 'GLUCOSE' THEN valuenum ELSE NULL END) AS GLUCOSE,
+        AVG(CASE WHEN label = 'HEMATOCRIT' THEN valuenum ELSE NULL END) AS HEMATOCRIT,
+        AVG(CASE WHEN label = 'HEMOGLOBIN' THEN valuenum ELSE NULL END) AS HEMOGLOBIN,
+        AVG(CASE WHEN label = 'LACTATE' THEN valuenum ELSE NULL END) AS LACTATE,
+        AVG(CASE WHEN label = 'PLATELET' THEN valuenum ELSE NULL END) AS PLATELET,
+        AVG(CASE WHEN label = 'POTASSIUM' THEN valuenum ELSE NULL END) AS POTASSIUM,
+        AVG(CASE WHEN label = 'Magnesium' THEN valuenum ELSE NULL END) AS MAGNESIUM,
+        AVG(CASE WHEN label = 'Oxygen saturation' THEN valuenum ELSE NULL END) AS OXYGEN_SATURATION,
+        AVG(CASE WHEN label = 'Phosphate' THEN valuenum ELSE NULL END) AS PHOSPHATE,
+        AVG(CASE WHEN label = 'PTT' THEN valuenum ELSE NULL END) AS PTT,
+        AVG(CASE WHEN label = 'INR' THEN valuenum ELSE NULL END) AS INR,
+        AVG(CASE WHEN label = 'PT' THEN valuenum ELSE NULL END) AS PT,
+        AVG(CASE WHEN label = 'SODIUM' THEN valuenum ELSE NULL END) AS SODIUM,
+        AVG(CASE WHEN label = 'BUN' THEN valuenum ELSE NULL END) AS BUN,
+        AVG(CASE WHEN label = 'WBC' THEN valuenum ELSE NULL END) AS WBC
+    from (
+        select
+            le.subject_id,
+            fi.icustay_id,
+            le.hadm_id,
+            ceil(timestamp_diff(le.charttime, fi.intime, HOUR)) as hours_in,
+            le.itemid,
+            CASE
+                WHEN itemid = 50868 THEN 'ANION GAP'
+                WHEN itemid = 50882 THEN 'BICARBONATE'
+                WHEN itemid = 50820 THEN 'Blood pH'
+                WHEN itemid = 50912 THEN 'CREATININE'
+                WHEN itemid = 50806 THEN 'CHLORIDE'
+                WHEN itemid = 50902 THEN 'CHLORIDE'
+                WHEN itemid = 50809 THEN 'GLUCOSE'
+                WHEN itemid = 50931 THEN 'GLUCOSE'
+                WHEN itemid = 50810 THEN 'HEMATOCRIT'
+                WHEN itemid = 51221 THEN 'HEMATOCRIT'
+                WHEN itemid = 50811 THEN 'HEMOGLOBIN'
+                WHEN itemid = 51222 THEN 'HEMOGLOBIN'
+                WHEN itemid = 50813 THEN 'LACTATE'
+                WHEN itemid = 51265 THEN 'PLATELET'
+                WHEN itemid = 50822 THEN 'POTASSIUM'
+                WHEN itemid = 50971 THEN 'POTASSIUM'
+                WHEN itemid = 50960 THEN 'Magnesium'
+                WHEN itemid = 50817 THEN 'Oxygen saturation'
+                WHEN itemid = 50970 THEN 'Phosphate'
+                WHEN itemid = 51275 THEN 'PTT'
+                WHEN itemid = 51237 THEN 'INR'
+                WHEN itemid = 51274 THEN 'PT'
+                WHEN itemid = 50824 THEN 'SODIUM'
+                WHEN itemid = 50983 THEN 'SODIUM'
+                WHEN itemid = 51006 THEN 'BUN'
+                WHEN itemid = 51300 THEN 'WBC'
+                WHEN itemid = 51301 THEN 'WBC'
+                
+                ELSE null
+            END as label,
+            CASE
+                WHEN itemid = 50868 and valuenum > 10000 THEN null -- mEq/L 'ANION GAP'
+                WHEN itemid = 50882 and valuenum > 10000 THEN null -- mEq/L 'BICARBONATE'
+                WHEN itemid = 50806 and valuenum > 10000 THEN null -- mEq/L 'CHLORIDE'
+                WHEN itemid = 50902 and valuenum > 10000 THEN null -- mEq/L 'CHLORIDE'
+                WHEN itemid = 50912 and valuenum >   150 THEN null -- mg/dL 'CREATININE'
+                WHEN itemid = 50809 and valuenum > 10000 THEN null -- mg/dL 'GLUCOSE'
+                WHEN itemid = 50931 and valuenum > 10000 THEN null -- mg/dL 'GLUCOSE'
+                WHEN itemid = 50810 and valuenum >   100 THEN null -- % 'HEMATOCRIT'
+                WHEN itemid = 51221 and valuenum >   100 THEN null -- % 'HEMATOCRIT'
+                WHEN itemid = 50811 and valuenum >    50 THEN null -- g/dL 'HEMOGLOBIN'
+                WHEN itemid = 51222 and valuenum >    50 THEN null -- g/dL 'HEMOGLOBIN'
+                WHEN itemid = 50813 and valuenum >    50 THEN null -- mmol/L 'LACTATE'
+                WHEN itemid = 51265 and valuenum > 10000 THEN null -- K/uL 'PLATELET'
+                WHEN itemid = 50822 and valuenum >    30 THEN null -- mEq/L 'POTASSIUM'
+                WHEN itemid = 50971 and valuenum >    30 THEN null -- mEq/L 'POTASSIUM'
+                WHEN itemid = 51275 and valuenum >   150 THEN null -- sec 'PTT'
+                WHEN itemid = 51237 and valuenum >    50 THEN null -- 'INR'
+                WHEN itemid = 51274 and valuenum >   150 THEN null -- sec 'PT'
+                WHEN itemid = 50824 and valuenum >   200 THEN null -- mEq/L == mmol/L 'SODIUM'
+                WHEN itemid = 50983 and valuenum >   200 THEN null -- mEq/L == mmol/L 'SODIUM'
+                WHEN itemid = 51006 and valuenum >   300 THEN null -- 'Blood Urea Nitrogen'
+                WHEN itemid = 51300 and valuenum >  1000 THEN null -- 'WBC'
+                WHEN itemid = 51301 and valuenum >  1000 THEN null -- 'WBC'
+                WHEN itemid = 50817 and valuenum >   100 THEN null --  Spo2
+            ELSE le.valuenum
+            END as valuenum          
+        from `physionet-data.mimiciii_clinical.labevents` le
+        inner join first_icustay fi
+            on le.SUBJECT_ID = fi.subject_id and le.HADM_ID = fi.hadm_id
+        where le.itemid in (
+            -- comment is: LABEL | CATEGORY | FLUID | NUMBER OF ROWS IN LABEVENTS
+            50868, -- ANION GAP | CHEMISTRY | BLOOD | 769895
+            50882, -- BICARBONATE | CHEMISTRY | BLOOD | 780733
+            50820, -- Blood pH | Blood pH | BLOOD |
+            51006, -- Blood UREA NITROGEN | CHEMISTRY | BLOOD | 791925
+            50902, -- CHLORIDE | CHEMISTRY | BLOOD | 795568
+            50806, -- CHLORIDE, WHOLE BLOOD | BLOOD GAS | BLOOD | 48187
+            50912, -- CREATININE | CHEMISTRY | BLOOD | 797476
+            50931, -- GLUCOSE | CHEMISTRY | BLOOD | 748981
+            50809, -- GLUCOSE | BLOOD GAS | BLOOD | 196734
+            51221, -- HEMATOCRIT | HEMATOLOGY | BLOOD | 881846
+            50810, -- HEMATOCRIT, CALCULATED | BLOOD GAS | BLOOD | 89715
+            51222, -- HEMOGLOBIN | HEMATOLOGY | BLOOD | 752523
+            50811, -- HEMOGLOBIN | BLOOD GAS | BLOOD | 89712
+            51237, -- INR(PT) | HEMATOLOGY | BLOOD | 471183
+            50813, -- LACTATE | BLOOD GAS | BLOOD | 187124
+            50960, -- Magnesium (Blood)
+            50817, -- Oxygen Saturation
+            51275, -- Partial Thromboplastin Time (PTT) | HEMATOLOGY | BLOOD | 474937
+            50970, -- Phosphate
+            51265, -- PLATELET COUNT | HEMATOLOGY | BLOOD | 778444
+            50971, -- POTASSIUM | CHEMISTRY | BLOOD | 845825
+            50822, -- POTASSIUM, WHOLE BLOOD | BLOOD GAS | BLOOD | 192946
+            51274, -- PT | HEMATOLOGY | BLOOD | 469090
+            50983, -- SODIUM | CHEMISTRY | BLOOD | 808489
+            50824, -- SODIUM, WHOLE BLOOD | BLOOD GAS | BLOOD | 71503
+            51301, -- WHITE BLOOD CELLS | HEMATOLOGY | BLOOD | 753301
+            51300  -- WBC COUNT | HEMATOLOGY | BLOOD | 2371
+        )
+        and le.valuenum is not null and le.valuenum > 0
+    ) t1
+    group by t1.subject_id, t1.icustay_id, t1.hadm_id, t1.hours_in
 ),
 
-final_data AS (
-    SELECT 
-        hm.*,
-        p.gender,
-        a.ethnicity,  -- Get ethnicity from admissions table
-        TIMESTAMP_DIFF(hm.charttime, p.dob, YEAR) AS age,
-        TIMESTAMP_DIFF(f.first_outtime, f.first_intime, HOUR) AS total_hospital_stay_hours  -- Total hours in hospital
-    FROM hourly_measurements hm
-    JOIN `physionet-data.mimiciii_clinical.icustays` icu ON hm.icustay_id = icu.icustay_id
-    JOIN `physionet-data.mimiciii_clinical.patients` p ON hm.subject_id = p.subject_id
-    JOIN `physionet-data.mimiciii_clinical.admissions` a ON hm.hadm_id = a.hadm_id  -- Join admissions to get ethnicity
-    JOIN first_icustay f ON hm.icustay_id = f.icustay_id  -- Join the first ICU stay to get total hospital stay
-    WHERE TIMESTAMP_DIFF(hm.charttime, p.dob, YEAR) > 15  -- Age > 15
+vitals as (
+    select 
+        t2.subject_id,
+        t2.icustay_id,
+        t2.hadm_id,
+        t2.hours_in,
+        AVG(case when t2.vitalid = 1 then t2.valuenum else null end) as heartrate,
+        AVG(case when t2.vitalid = 2 then t2.valuenum else null end) as sysbp,
+        AVG(case when t2.vitalid = 3 then t2.valuenum else null end) as diasbp,
+        AVG(case when t2.vitalid = 4 then t2.valuenum else null end) as meanbp,
+        AVG(case when t2.vitalid = 5 then t2.valuenum else null end) as resprate,
+        AVG(case when t2.vitalid = 6 then t2.valuenum else null end) as temperature,
+        AVG(case when t2.vitalid = 7 then t2.valuenum else null end) as spo2,
+        AVG(case when t2.vitalid = 8 then t2.valuenum else null end) as glucose,
+        AVG(case when t2.vitalid = 9 then t2.valuenum else null end) as weight
+    from (
+        select
+            ce.subject_id,
+            ce.icustay_id,
+            ce.hadm_id,
+            ceil(timestamp_diff(ce.charttime, fi.intime, HOUR)) as hours_in,
+            ce.valuenum,
+            ce.valueuom,
+            case
+                when itemid in (211,220045) and valuenum > 0 and valuenum < 300 then 1 -- HeartRate
+                when itemid in (51,442,455,6701,220179,220050) and valuenum > 0 and valuenum < 400 then 2 -- SysBP
+                when itemid in (8368,8440,8441,8555,220180,220051) and valuenum > 0 and valuenum < 300 then 3 -- DiasBP
+                when itemid in (456,52,6702,443,220052,220181,225312) and valuenum > 0 and valuenum < 300 then 4 -- MeanBP
+                when itemid in (615,618,220210,224690) and valuenum > 0 and valuenum < 70 then 5 -- RespRate
+                when itemid in (223761,678) and valuenum > 70 and valuenum < 120  then 6 -- TempF, converted to degC in valuenum call
+                when itemid in (223762,676) and valuenum > 10 and valuenum < 50  then 6 -- TempC
+                when itemid in (646,220277) and valuenum > 0 and valuenum <= 100 then 7 -- SpO2
+                when itemid in (807,811,1529,3745,3744,225664,220621,226537) and valuenum > 0 then 8 -- Glucose
+                when itemid in (762, 226512) and valuenum > 0 then 9 -- Weight
+            else null end as vitalid
+
+        from `physionet-data.mimiciii_clinical.chartevents` ce
+        inner join first_icustay fi
+            on ce.ICUSTAY_ID = fi.icustay_id and ce.SUBJECT_ID = fi.subject_id and ce.HADM_ID = fi.hadm_id
+        where ce.ITEMID in (
+            -- HEART RATE
+            211, --"Heart Rate"
+            220045, --"Heart Rate"
+
+            -- Systolic/diastolic
+            51, --	Arterial BP [Systolic]
+            442, --	Manual BP [Systolic]
+            455, --	NBP [Systolic]
+            6701, --	Arterial BP #2 [Systolic]
+            220179, --	Non Invasive Blood Pressure systolic
+            220050, --	Arterial Blood Pressure systolic
+
+            8368, --	Arterial BP [Diastolic]
+            8440, --	Manual BP [Diastolic]
+            8441, --	NBP [Diastolic]
+            8555, --	Arterial BP #2 [Diastolic]
+            220180, --	Non Invasive Blood Pressure diastolic
+            220051, --	Arterial Blood Pressure diastolic
+
+
+            -- MEAN ARTERIAL PRESSURE
+            456, --"NBP Mean"
+            52, --"Arterial BP Mean"
+            6702, --	Arterial BP Mean #2
+            443, --	Manual BP Mean(calc)
+            220052, --"Arterial Blood Pressure mean"
+            220181, --"Non Invasive Blood Pressure mean"
+            225312, --"ART BP mean"
+
+            -- RESPIRATORY RATE
+            618,--	Respiratory Rate
+            615,--	Resp Rate (Total)
+            220210,--	Respiratory Rate
+            224690, --	Respiratory Rate (Total)
+
+            -- SPO2, peripheral
+            646,
+            220277,
+
+            -- GLUCOSE, both lab and fingerstick
+            807,--	Fingerstick Glucose
+            811,--	Glucose (70-105)
+            1529,--	Glucose
+            3745,--	BloodGlucose
+            3744,--	Blood Glucose
+            225664,--	Glucose finger stick
+            220621,--	Glucose (serum)
+            226537,--	Glucose (whole blood)
+
+            -- TEMPERATURE
+            223762, -- "Temperature Celsius"
+            676,	-- "Temperature C"
+            223761, -- "Temperature Fahrenheit"
+            678, --	"Temperature F"
+
+            -- Weight
+            762, 226512
+
+        )
+    ) t2
+    group by t2.subject_id, t2.icustay_id, t2.hadm_id, t2.hours_in
 )
 
-SELECT * 
-FROM final_data
-ORDER BY icustay_id, charttime;
+SELECT 
+    COALESCE(l.subject_id, v.subject_id) as subject_id,
+    COALESCE(l.icustay_id, v.icustay_id) as icustay_id,
+    COALESCE(l.hadm_id, v.hadm_id) as hadm_id,
+    COALESCE(l.hours_in, v.hours_in) as hours_in,
+    
+    -- Demographics (joining with first match)
+    fi.gender,
+    fi.age,
+    fi.ethnicity,
+    
+    -- Lab measurements
+    l.ANION_GAP,
+    l.BICARBONATE,
+    l.BLOOD_PH,
+    l.BUN as blood_urea_nitrogen,
+    l.CHLORIDE,
+    l.CREATININE,
+    l.GLUCOSE as lab_glucose,
+    l.HEMATOCRIT,
+    l.HEMOGLOBIN,
+    l.INR,
+    l.LACTATE,
+    l.MAGNESIUM,
+    l.OXYGEN_SATURATION,
+    l.PHOSPHATE,
+    l.PTT as partial_thromboplastin_time,
+    l.PLATELET as platelets,
+    l.POTASSIUM,
+    l.PT as prothrombin_time,
+    l.SODIUM,
+    l.WBC as white_blood_cell_count,
+    
+    -- Vital signs
+    v.heartrate as heart_rate,
+    v.sysbp as systolic_blood_pressure,
+    v.diasbp as diastolic_blood_pressure,
+    v.meanbp as mean_blood_pressure,
+    v.resprate as respiratory_rate,
+    v.temperature,
+    v.spo2 as oxygen_saturation_vital,
+    v.glucose as fingerstick_glucose,
+    v.weight
+
+FROM lab_measurements l
+FULL OUTER JOIN vitals v
+    ON l.subject_id = v.subject_id 
+    AND l.icustay_id = v.icustay_id 
+    AND l.hadm_id = v.hadm_id
+    AND l.hours_in = v.hours_in
+LEFT JOIN first_icustay fi
+    ON COALESCE(l.subject_id, v.subject_id) = fi.subject_id
+    AND COALESCE(l.icustay_id, v.icustay_id) = fi.icustay_id
+    AND COALESCE(l.hadm_id, v.hadm_id) = fi.hadm_id
