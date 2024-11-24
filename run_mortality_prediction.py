@@ -82,7 +82,7 @@ def get_args():
         more highly weighted during training).")
     parser.add_argument("--include_cohort_as_feature", action="store_true", default=False,
                         help="This is an indicator flag to include cohort membership as an additional feature in the matrix.")
-    parser.add_argument("--epochs", type=int, default=30,
+    parser.add_argument("--epochs", type=int, default=5,
                         help="Number of epochs to train for. Type: int. Default: 30.")
     parser.add_argument("--train_val_random_seed", type=int, default=0,
                         help="Random seed to use during train / val / split process. Type: int. Default: 0.")
@@ -178,6 +178,8 @@ def make_discrete_values(mat):
 
     normal_dict = mat.groupby(['subject_id']).mean().mean().to_dict()
     std_dict = mat.std().to_dict()
+    import pdb
+    #pdb.set_trace()
     feature_cols = mat.columns[len(INDEX_COLS):]
     print("feature_cols", feature_cols)
     X_words = mat.loc[:, feature_cols].apply(
@@ -199,7 +201,8 @@ def transform_vals(x, normal_dict, std_dict):
     Returns:
         bool: The return value. True for success, False otherwise.
     """
-
+    import pdb
+    #pdb.set_trace()
     x = 1.0*(x - normal_dict[x.name])/std_dict[x.name]
     x = x.round()
     x = x.clip(-4, 4)
@@ -524,7 +527,7 @@ def create_multitask_model(input_dim, n_layers, units, num_dense_shared_layers, 
     learning_rate = 0.0001
     final_model = Model(inputs=x_inputs, outputs=output_layers)
     final_model.compile(loss=loss_fn,
-                        optimizer=Adam(lr=learning_rate),
+                        optimizer=Adam(learning_rate=learning_rate),
                         metrics=['accuracy'])
 
     return final_model
@@ -550,10 +553,12 @@ def get_mtl_sample_weights(y, cohorts, all_tasks, sample_weights=None):
     sw_dict = {}
     for task in all_tasks:
         task_indicator_col = (cohorts == task).astype(int)
-        if sample_weights:
+        if len(sample_weights) >0:
             task_indicator_col = np.array(
                 task_indicator_col) * np.array(sample_weights)
         sw_dict[task] = task_indicator_col
+    print("shape y_train:", y.shape)
+    print("sample weight shape:", len(sw_dict))
     return sw_dict
 
 
@@ -968,8 +973,9 @@ def run_multitask_model(X_train, y_train, cohorts_train,
         '/checkpoints/' + "_".join(model_fname_parts)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
-    model_fname = model_dir + '/{epoch:02d}-{val_loss:.2f}.hdf5'
+    model_fname = model_dir + '/{epoch:02d}-{val_loss:.2f}.hdf5.keras'
     checkpointer = ModelCheckpoint(model_fname, monitor='val_loss', verbose=1)
+    print("n_tasks len:", n_tasks)
     mtl_model.fit(X_train, [y_train for i in range(n_tasks)],
                   batch_size=100,
                   epochs=FLAGS.epochs,
@@ -979,14 +985,14 @@ def run_multitask_model(X_train, y_train, cohorts_train,
                   callbacks=[early_stopping, checkpointer],
                   validation_data=(X_val, [y_val for i in range(n_tasks)]))
 
-    mtl_model.save(FLAGS.experiment_name + '/models/' +
+    mtl_model.save("./" + FLAGS.experiment_name + '/models/' +
                    "_".join(model_fname_parts))
 
     cohort_aucs = []
 
     y_pred = get_correct_task_mtl_outputs(
         mtl_model.predict(X_val), cohorts_val, all_tasks)
-
+    print("y_pred:", y_pred)
     # task aucs
     for task in all_tasks:
         print('Multitask AUC on', task, ': ')
@@ -1078,6 +1084,9 @@ def load_processed_data(data_hours=24, gap_time=12):
         mort_cutoff = data_hours + gap_time
 
         X, static = load_phys_data()
+        X = X.drop(columns=['gender', 'age' , 'ethnicity'])
+        X = X.sample(frac=0.05)
+
 
         # Add SAPS Score to static matrix
         saps = pd.read_csv('data/saps.csv')
@@ -1127,7 +1136,8 @@ def load_processed_data(data_hours=24, gap_time=12):
 
         static = static[((static.time_in_icu >= data_cutoff) & (
             static.mort_hosp_valid == False)) | (static.time_til_mort >= mort_cutoff)]
-
+        import pdb
+        #pdb.set_trace()
         # Make discrete values and cut off stay at 24 hours
         X_discrete = make_discrete_values(X)
         X_discrete = X_discrete[X_discrete.hours_in < data_cutoff]

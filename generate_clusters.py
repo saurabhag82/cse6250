@@ -18,7 +18,7 @@ def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--latent_dim", type=int, default=50, \
         help='The embedding size, or latent dimension of the autoencoder. Type: int. Default: 50.')
-    parser.add_argument("--ae_epochs", type=int, default=100, \
+    parser.add_argument("--ae_epochs", type=int, default=5, \
         help='Number of epochs to train autoencoder. Type: int. Default: 100.')
     parser.add_argument("--ae_learning_rate", type=float, default=0.0001, \
         help='Learning rate for autoencoder. Type: float. Default: 0.0001.')
@@ -117,6 +117,8 @@ if __name__ == "__main__":
     FLAGS = get_args()
 
     # Load Data
+    import pdb
+    #pdb.set_trace()
     X, Y, careunits, saps_quartile, subject_ids = load_processed_data(FLAGS.data_hours, FLAGS.gap_time)
     Y = Y.astype(int)
     cohort_col = careunits
